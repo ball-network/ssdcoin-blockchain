@@ -1,0 +1,4 @@
+[submodule "mozilla-ca"]
+	path = mozilla-ca
+	url = https://github.com/chia-network/mozilla-ca.git
+	branch = main
