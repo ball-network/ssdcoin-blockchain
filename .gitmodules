@@ -2,3 +2,7 @@
 	path = mozilla-ca
 	url = https://github.com/chia-network/mozilla-ca.git
 	branch = main
+[submodule "ssdcoin-blockchain-gui"]
+	path = ssdcoin-blockchain-gui
+	url = https://github.com/ball-network/ssdcoin-blockchain-gui.git
+	branch = main
