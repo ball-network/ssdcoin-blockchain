@@ -3,17 +3,25 @@ from __future__ import annotations
 import logging
 import random
 from dataclasses import replace
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
-import blspy
-from blspy import G1Element, G2Element
-from chia_rs import compute_merkle_set_root
+import chia_rs
+from chia_rs import G1Element, G2Element, compute_merkle_set_root
 from chiabip158 import PyBIP158
 
 from ssdcoin.consensus.block_record import BlockRecord
-from ssdcoin.consensus.block_rewards import calculate_base_farmer_reward, calculate_pool_reward, calculate_community_reward
+from ssdcoin.consensus.block_rewards import (
+    STAKE_FORK_HEIGHT,
+    calculate_base_farmer_reward,
+    calculate_pool_reward,
+    calculate_community_reward,
+)
 from ssdcoin.consensus.blockchain_interface import BlockchainInterface
-from ssdcoin.consensus.coinbase import create_farmer_coin, create_pool_coin, create_community_coin
+from ssdcoin.consensus.coinbase import (
+    create_farmer_coin,
+    create_pool_coin,
+    create_community_coin,
+)
 from ssdcoin.consensus.constants import ConsensusConstants
 from ssdcoin.consensus.cost_calculator import NPCResult
 from ssdcoin.full_node.mempool_check_conditions import get_name_puzzle_conditions
@@ -28,6 +36,7 @@ from ssdcoin.types.blockchain_format.vdf import VDFInfo, VDFProof
 from ssdcoin.types.end_of_slot_bundle import EndOfSubSlotBundle
 from ssdcoin.types.full_block import FullBlock
 from ssdcoin.types.generator_types import BlockGenerator
+from ssdcoin.types.stake_record import create_stake_farm_rewards
 from ssdcoin.types.unfinished_block import UnfinishedBlock
 from ssdcoin.util.hash import std_hash
 from ssdcoin.util.ints import uint8, uint32, uint64, uint128
@@ -37,22 +46,42 @@ from ssdcoin.util.recursive_replace import recursive_replace
 log = logging.getLogger(__name__)
 
 
+def compute_block_cost(generator: BlockGenerator, constants: ConsensusConstants, height: uint32) -> uint64:
+    result: NPCResult = get_name_puzzle_conditions(
+        generator, constants.MAX_BLOCK_COST_CLVM, mempool_mode=True, height=height, constants=constants
+    )
+    return result.cost
+
+
+def compute_block_fee(additions: Sequence[Coin], removals: Sequence[Coin]) -> uint64:
+    removal_amount = 0
+    addition_amount = 0
+    for coin in removals:
+        removal_amount += coin.amount
+    for coin in additions:
+        addition_amount += coin.amount
+    return uint64(removal_amount - addition_amount)
+
+
 def create_foliage(
-    constants: ConsensusConstants,
-    reward_block_unfinished: RewardChainBlockUnfinished,
-    block_generator: Optional[BlockGenerator],
-    aggregate_sig: G2Element,
-    additions: List[Coin],
-    removals: List[Coin],
-    prev_block: Optional[BlockRecord],
-    blocks: BlockchainInterface,
-    total_iters_sp: uint128,
-    timestamp: uint64,
-    farmer_reward_puzzlehash: bytes32,
-    pool_target: PoolTarget,
-    get_plot_signature: Callable[[bytes32, G1Element], G2Element],
-    get_pool_signature: Callable[[PoolTarget, Optional[G1Element]], Optional[G2Element]],
-    seed: bytes = b"",
+        constants: ConsensusConstants,
+        reward_block_unfinished: RewardChainBlockUnfinished,
+        block_generator: Optional[BlockGenerator],
+        aggregate_sig: G2Element,
+        additions: List[Coin],
+        removals: List[Coin],
+        stake_farm_records_dict: Dict[bytes32, Dict[bytes32, int]],
+        prev_block: Optional[BlockRecord],
+        blocks: BlockchainInterface,
+        total_iters_sp: uint128,
+        timestamp: uint64,
+        farmer_reward_puzzlehash: bytes32,
+        pool_target: PoolTarget,
+        get_plot_signature: Callable[[bytes32, G1Element], G2Element],
+        get_pool_signature: Callable[[PoolTarget, Optional[G1Element]], Optional[G2Element]],
+        seed: bytes,
+        compute_cost: Callable[[BlockGenerator, ConsensusConstants, uint32], uint64],
+        compute_fees: Callable[[Sequence[Coin], Sequence[Coin]], uint64],
 ) -> Tuple[Foliage, Optional[FoliageTransactionBlock], Optional[TransactionsInfo]]:
     """
     Creates a foliage for a given reward chain block. This may or may not be a tx block. In the case of a tx block,
@@ -85,9 +114,10 @@ def create_foliage(
         prev_transaction_block = None
         is_transaction_block = True
 
-    random.seed(seed)
+    rng = random.Random()
+    rng.seed(seed)
     # Use the extension data to create different blocks based on header hash
-    extension_data: bytes32 = bytes32(random.randint(0, 100000000).to_bytes(32, "big"))
+    extension_data: bytes32 = bytes32(rng.randint(0, 100000000).to_bytes(32, "big"))
     if prev_block is None:
         height: uint32 = uint32(0)
     else:
@@ -131,20 +161,11 @@ def create_foliage(
         # Calculate the cost of transactions
         if block_generator is not None:
             generator_block_heights_list = block_generator.block_height_list
-            result: NPCResult = get_name_puzzle_conditions(
-                block_generator, constants.MAX_BLOCK_COST_CLVM, mempool_mode=True, height=height, constants=constants
-            )
-            cost = result.cost
+            cost = compute_cost(block_generator, constants, height)
 
-            removal_amount = 0
-            addition_amount = 0
-            for coin in removals:
-                removal_amount += coin.amount
-            for coin in additions:
-                addition_amount += coin.amount
-            spend_bundle_fees = removal_amount - addition_amount
+            spend_bundle_fees = compute_fees(additions, removals)
         else:
-            spend_bundle_fees = 0
+            spend_bundle_fees = uint64(0)
 
         reward_claims_incorporated = []
         if height > 0:
@@ -155,49 +176,94 @@ def create_foliage(
                 curr = blocks.block_record(curr.prev_hash)
 
             assert curr.fees is not None
-            pool_coin = create_pool_coin(
-                curr.height, curr.pool_puzzle_hash, calculate_pool_reward(curr.height), constants.GENESIS_CHALLENGE
-            )
-
-            farmer_coin = create_farmer_coin(
-                curr.height,
-                curr.farmer_puzzle_hash,
-                uint64(calculate_base_farmer_reward(curr.height) + curr.fees),
-                constants.GENESIS_CHALLENGE,
-            )
-            community_coin = create_community_coin(
-                curr.height,
-                curr.community_puzzle_hash,
-                calculate_community_reward(curr.height),
-                constants.GENESIS_CHALLENGE,
-            )
             assert curr.header_hash == prev_transaction_block.header_hash
-            reward_claims_incorporated += [pool_coin, farmer_coin, community_coin]
+            pool_reward = calculate_pool_reward(prev_transaction_block.height)
+            if pool_reward > 0:
+                reward_claims_incorporated.append(create_pool_coin(
+                    prev_transaction_block.height,
+                    prev_transaction_block.pool_puzzle_hash,
+                    calculate_pool_reward(prev_transaction_block.height),
+                    constants.GENESIS_CHALLENGE,
+                ))
+
+            reward_claims_incorporated.append(create_farmer_coin(
+                prev_transaction_block.height,
+                prev_transaction_block.farmer_puzzle_hash,
+                uint64(calculate_base_farmer_reward(prev_transaction_block.height) + prev_transaction_block.fees),
+                constants.GENESIS_CHALLENGE,
+            ))
+
+            if prev_transaction_block.height >= STAKE_FORK_HEIGHT:
+                if prev_transaction_block.height % 1000 == 0:
+                    reward_claims_incorporated.append(
+                        create_community_coin(
+                            prev_transaction_block.height,
+                            prev_transaction_block.community_puzzle_hash,
+                            calculate_community_reward(prev_transaction_block.height),
+                            constants.GENESIS_CHALLENGE,
+                        )
+                    )
+                stake_records = stake_farm_records_dict.get(prev_transaction_block.header_hash)
+                if stake_records is not None and len(stake_records) > 0:
+                    reward_claims_incorporated += create_stake_farm_rewards(
+                        constants, stake_records, prev_transaction_block.height
+                    )
+            else:
+                reward_claims_incorporated.append(
+                    create_community_coin(
+                        prev_transaction_block.height,
+                        prev_transaction_block.community_puzzle_hash,
+                        calculate_community_reward(prev_transaction_block.height),
+                        constants.GENESIS_CHALLENGE,
+                    )
+                )
 
             if curr.height > 0:
                 curr = blocks.block_record(curr.prev_hash)
                 # Prev block is not genesis
                 while not curr.is_transaction_block:
-                    pool_coin = create_pool_coin(
-                        curr.height,
-                        curr.pool_puzzle_hash,
-                        calculate_pool_reward(curr.height),
-                        constants.GENESIS_CHALLENGE,
-                    )
-                    farmer_coin = create_farmer_coin(
+                    pool_reward = calculate_pool_reward(curr.height)
+                    if pool_reward > 0:
+                        reward_claims_incorporated.append(create_pool_coin(
+                            curr.height,
+                            curr.pool_puzzle_hash,
+                            calculate_pool_reward(curr.height),
+                            constants.GENESIS_CHALLENGE,
+                        ))
+
+                    reward_claims_incorporated.append(create_farmer_coin(
                         curr.height,
                         curr.farmer_puzzle_hash,
                         calculate_base_farmer_reward(curr.height),
                         constants.GENESIS_CHALLENGE,
-                    )
-                    community_coin = create_community_coin(
-                        curr.height,
-                        curr.community_puzzle_hash,
-                        calculate_community_reward(curr.height),
-                        constants.GENESIS_CHALLENGE,
-                    )
-                    reward_claims_incorporated += [pool_coin, farmer_coin, community_coin]
+                    ))
+
+                    if curr.height >= STAKE_FORK_HEIGHT:
+                        if curr.height % 1000 == 0:
+                            reward_claims_incorporated.append(
+                                create_community_coin(
+                                    curr.height,
+                                    curr.community_puzzle_hash,
+                                    calculate_community_reward(curr.height),
+                                    constants.GENESIS_CHALLENGE,
+                                )
+                            )
+                        stake_records = stake_farm_records_dict.get(curr.header_hash)
+                        if stake_records is not None and len(stake_records) > 0:
+                            reward_claims_incorporated += create_stake_farm_rewards(
+                                constants, stake_records, curr.height
+                            )
+                    else:
+                        reward_claims_incorporated.append(
+                            create_community_coin(
+                                curr.height,
+                                curr.community_puzzle_hash,
+                                calculate_community_reward(curr.height),
+                                constants.GENESIS_CHALLENGE,
+                            )
+                        )
                     curr = blocks.block_record(curr.prev_hash)
+
         additions.extend(reward_claims_incorporated.copy())
         for coin in additions:
             tx_additions.append(coin)
@@ -235,7 +301,7 @@ def create_foliage(
 
         generator_refs_hash = bytes32([1] * 32)
         if generator_block_heights_list not in (None, []):
-            generator_ref_list_bytes = b"".join([bytes(i) for i in generator_block_heights_list])
+            generator_ref_list_bytes = b"".join([i.stream_to_bytes() for i in generator_block_heights_list])
             generator_refs_hash = std_hash(generator_ref_list_bytes)
 
         filter_hash: bytes32 = std_hash(encoded)
@@ -244,7 +310,7 @@ def create_foliage(
             generator_hash,
             generator_refs_hash,
             aggregate_sig,
-            uint64(spend_bundle_fees),
+            spend_bundle_fees,
             cost,
             reward_claims_incorporated,
         )
@@ -289,28 +355,31 @@ def create_foliage(
 
 
 def create_unfinished_block(
-    constants: ConsensusConstants,
-    sub_slot_start_total_iters: uint128,
-    sub_slot_iters: uint64,
-    signage_point_index: uint8,
-    sp_iters: uint64,
-    ip_iters: uint64,
-    proof_of_space: ProofOfSpace,
-    slot_cc_challenge: bytes32,
-    farmer_reward_puzzle_hash: bytes32,
-    pool_target: PoolTarget,
-    get_plot_signature: Callable[[bytes32, G1Element], G2Element],
-    get_pool_signature: Callable[[PoolTarget, Optional[G1Element]], Optional[G2Element]],
-    signage_point: SignagePoint,
-    timestamp: uint64,
-    blocks: BlockchainInterface,
-    seed: bytes = b"",
-    block_generator: Optional[BlockGenerator] = None,
-    aggregate_sig: G2Element = G2Element(),
-    additions: Optional[List[Coin]] = None,
-    removals: Optional[List[Coin]] = None,
-    prev_block: Optional[BlockRecord] = None,
-    finished_sub_slots_input: Optional[List[EndOfSubSlotBundle]] = None,
+        constants: ConsensusConstants,
+        sub_slot_start_total_iters: uint128,
+        sub_slot_iters: uint64,
+        signage_point_index: uint8,
+        sp_iters: uint64,
+        ip_iters: uint64,
+        proof_of_space: ProofOfSpace,
+        slot_cc_challenge: bytes32,
+        farmer_reward_puzzle_hash: bytes32,
+        pool_target: PoolTarget,
+        get_plot_signature: Callable[[bytes32, G1Element], G2Element],
+        get_pool_signature: Callable[[PoolTarget, Optional[G1Element]], Optional[G2Element]],
+        signage_point: SignagePoint,
+        timestamp: uint64,
+        blocks: BlockchainInterface,
+        seed: bytes = b"",
+        block_generator: Optional[BlockGenerator] = None,
+        aggregate_sig: G2Element = G2Element(),
+        additions: Optional[List[Coin]] = None,
+        removals: Optional[List[Coin]] = None,
+        stake_farm_records_dict: Optional[Dict[bytes32, Dict[bytes32, int]]] = None,
+        prev_block: Optional[BlockRecord] = None,
+        finished_sub_slots_input: Optional[List[EndOfSubSlotBundle]] = None,
+        compute_cost: Callable[[BlockGenerator, ConsensusConstants, uint32], uint64] = compute_block_cost,
+        compute_fees: Callable[[Sequence[Coin], Sequence[Coin]], uint64] = compute_block_fee,
 ) -> UnfinishedBlock:
     """
     Creates a new unfinished block using all the information available at the signage point. This will have to be
@@ -336,6 +405,7 @@ def create_unfinished_block(
         aggregate_sig: aggregate of all transactions (or infinity element)
         additions: Coins added in spend_bundle
         removals: Coins removed in spend_bundle
+        stake_farm_records_dict: Stake difficulty records dict
         prev_block: previous block (already in chain) from the signage point
         blocks: dictionary from header hash to SBR of all included SBR
         finished_sub_slots_input: finished_sub_slots at the signage point
@@ -380,7 +450,7 @@ def create_unfinished_block(
     rc_sp_signature: Optional[G2Element] = get_plot_signature(rc_sp_hash, proof_of_space.plot_public_key)
     assert cc_sp_signature is not None
     assert rc_sp_signature is not None
-    assert blspy.AugSchemeMPL.verify(proof_of_space.plot_public_key, cc_sp_hash, cc_sp_signature)
+    assert chia_rs.AugSchemeMPL.verify(proof_of_space.plot_public_key, cc_sp_hash, cc_sp_signature)
 
     total_iters = uint128(sub_slot_start_total_iters + ip_iters + (sub_slot_iters if overflow else 0))
 
@@ -398,6 +468,8 @@ def create_unfinished_block(
         additions = []
     if removals is None:
         removals = []
+    if stake_farm_records_dict is None:
+        stake_farm_records_dict = {}
     (foliage, foliage_transaction_block, transactions_info) = create_foliage(
         constants,
         rc_block,
@@ -405,6 +477,7 @@ def create_unfinished_block(
         aggregate_sig,
         additions,
         removals,
+        stake_farm_records_dict,
         prev_block,
         blocks,
         total_iters_sp,
@@ -414,6 +487,8 @@ def create_unfinished_block(
         get_plot_signature,
         get_pool_signature,
         seed,
+        compute_cost,
+        compute_fees,
     )
     return UnfinishedBlock(
         finished_sub_slots,
@@ -429,18 +504,18 @@ def create_unfinished_block(
 
 
 def unfinished_block_to_full_block(
-    unfinished_block: UnfinishedBlock,
-    cc_ip_vdf: VDFInfo,
-    cc_ip_proof: VDFProof,
-    rc_ip_vdf: VDFInfo,
-    rc_ip_proof: VDFProof,
-    icc_ip_vdf: Optional[VDFInfo],
-    icc_ip_proof: Optional[VDFProof],
-    finished_sub_slots: List[EndOfSubSlotBundle],
-    prev_block: Optional[BlockRecord],
-    blocks: BlockchainInterface,
-    total_iters_sp: uint128,
-    difficulty: uint64,
+        unfinished_block: UnfinishedBlock,
+        cc_ip_vdf: VDFInfo,
+        cc_ip_proof: VDFProof,
+        rc_ip_vdf: VDFInfo,
+        rc_ip_proof: VDFProof,
+        icc_ip_vdf: Optional[VDFInfo],
+        icc_ip_proof: Optional[VDFProof],
+        finished_sub_slots: List[EndOfSubSlotBundle],
+        prev_block: Optional[BlockRecord],
+        blocks: BlockchainInterface,
+        total_iters_sp: uint128,
+        difficulty: uint64,
 ) -> FullBlock:
     """
     Converts an unfinished block to a finished block. Includes all the infusion point VDFs as well as tweaking

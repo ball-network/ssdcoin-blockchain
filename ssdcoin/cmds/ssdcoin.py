@@ -9,6 +9,7 @@ from ssdcoin import __version__
 from ssdcoin.cmds.beta import beta_cmd
 from ssdcoin.cmds.completion import completion
 from ssdcoin.cmds.configure import configure_cmd
+from ssdcoin.cmds.dao import dao_cmd
 from ssdcoin.cmds.data import data_cmd
 from ssdcoin.cmds.db import db_cmd
 from ssdcoin.cmds.dev import dev_cmd
@@ -26,7 +27,7 @@ from ssdcoin.cmds.show import show_cmd
 from ssdcoin.cmds.start import start_cmd
 from ssdcoin.cmds.stop import stop_cmd
 from ssdcoin.cmds.wallet import wallet_cmd
-from ssdcoin.cmds.staking import staking_cmd
+from ssdcoin.cmds.stake import stake_cmd
 from ssdcoin.util.default_root import DEFAULT_KEYS_ROOT_PATH, DEFAULT_ROOT_PATH
 from ssdcoin.util.errors import KeychainCurrentPassphraseIsInvalid
 from ssdcoin.util.keychain import Keychain, set_keys_root_path
@@ -37,7 +38,7 @@ CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
 
 @click.group(
     help=f"\n  Manage ssdcoin blockchain infrastructure ({__version__})\n",
-    epilog="Try 'ssd start node', 'ssd netspace -d 192', or 'ssd show -s'",
+    epilog="Try 'ssd start node', 'ssdcoin netspace -d 192', or 'ssd show -s'",
     context_settings=CONTEXT_SETTINGS,
 )
 @click.option("--root-path", default=DEFAULT_ROOT_PATH, help="Config file root", type=click.Path(), show_default=True)
@@ -96,7 +97,7 @@ def version_cmd() -> None:
     help="If the keyring is passphrase-protected, the daemon will wait for an unlock command before accessing keys",
     default=False,
     is_flag=True,
-    hidden=True,  # --wait-for-unlock is only set when launched by ssdcoin start <service>
+    hidden=True,  # --wait-for-unlock is only set when launched by ssd start <service>
 )
 @click.pass_context
 def run_daemon_cmd(ctx: click.Context, wait_for_unlock: bool) -> None:
@@ -113,7 +114,7 @@ def run_daemon_cmd(ctx: click.Context, wait_for_unlock: bool) -> None:
 cli.add_command(keys_cmd)
 cli.add_command(plots_cmd)
 cli.add_command(wallet_cmd)
-cli.add_command(staking_cmd)
+cli.add_command(stake_cmd)
 cli.add_command(plotnft_cmd)
 cli.add_command(configure_cmd)
 cli.add_command(init_cmd)
@@ -130,6 +131,7 @@ cli.add_command(data_cmd)
 cli.add_command(passphrase_cmd)
 cli.add_command(beta_cmd)
 cli.add_command(completion)
+cli.add_command(dao_cmd)
 cli.add_command(dev_cmd)
 
 

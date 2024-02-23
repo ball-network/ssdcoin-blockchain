@@ -9,6 +9,7 @@ from ssdcoin.types.blockchain_format.program import Program
 from ssdcoin.types.blockchain_format.sized_bytes import bytes32
 from ssdcoin.wallet.payment import Payment
 from ssdcoin.wallet.puzzles.clawback.puzzle_decorator import ClawbackPuzzleDecorator
+from ssdcoin.wallet.puzzles.stake.puzzle_decorator import StakePuzzleDecorator
 from ssdcoin.wallet.util.puzzle_decorator_type import PuzzleDecoratorType
 
 
@@ -53,7 +54,9 @@ class PuzzleDecoratorManager:
                 logging.error(f"Undefined decorator: {decorator}")
                 continue
             decorator_name = decorator["decorator"]
-            if decorator_name == PuzzleDecoratorType.CLAWBACK.name:
+            if decorator_name == PuzzleDecoratorType.STAKE.name:
+                self.decorator_list.append(StakePuzzleDecorator.create(decorator))
+            elif decorator_name == PuzzleDecoratorType.CLAWBACK.name:
                 self.decorator_list.append(ClawbackPuzzleDecorator.create(decorator))
             else:
                 logging.error(f"Unknown puzzle decorator type: {decorator}")

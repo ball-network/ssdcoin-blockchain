@@ -11,6 +11,7 @@ from ssdcoin.server.start_service import Service, async_run
 from ssdcoin.util.ssdcoin_logging import initialize_service_logging
 from ssdcoin.util.config import load_config, load_config_cli
 from ssdcoin.util.default_root import DEFAULT_ROOT_PATH
+from ssdcoin.util.misc import SignalHandlers
 
 # See: https://bugs.python.org/issue29288
 "".encode("idna")
@@ -52,8 +53,9 @@ async def async_main() -> int:
     config[SERVICE_NAME] = service_config
     service = create_introducer_service(DEFAULT_ROOT_PATH, config)
     initialize_service_logging(service_name=SERVICE_NAME, config=config)
-    await service.setup_process_global_state()
-    await service.run()
+    async with SignalHandlers.manage() as signal_handlers:
+        await service.setup_process_global_state(signal_handlers=signal_handlers)
+        await service.run()
 
     return 0
 

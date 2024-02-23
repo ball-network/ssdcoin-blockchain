@@ -3,5 +3,5 @@
 
 set -e
 
-unlink /usr/bin/ssdcoin || true
+unlink /usr/bin/ssd || true
 unlink /usr/bin/ssdcoin-blockchain || true

@@ -38,9 +38,9 @@ def generate(shell: str) -> None:
     Generate shell completion code for the current, or specified (-s)hell.
     You will need to 'source' this code to enable shell completion.
     You can source it directly (performs slower) by running:
-        \033[3;33meval "$(ssd complete generate)"\033[0m
+        \033[3;33meval "$(ssdcoin complete generate)"\033[0m
     or you can save the output to a file:
-        \033[3;33mssd complete generate > ~/.ssdcoin-complete-bash\033[0m
+        \033[3;33mssdcoin complete generate > ~/.ssdcoin-complete-bash\033[0m
     and source that file with:
         \033[3;33m. ~/.ssdcoin-complete-bash\033[0m
     """

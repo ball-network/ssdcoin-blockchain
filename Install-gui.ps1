@@ -37,7 +37,7 @@ try {
     py ..\installhelper.py
 
     Write-Output ""
-    Write-Output "SSDCoin  blockchain Install-gui.ps1 completed."
+    Write-Output "SSDCoin blockchain Install-gui.ps1 completed."
     Write-Output ""
     Write-Output "Type 'cd ssdcoin-blockchain-gui' and then 'npm run electron' to start the GUI."
 } finally {

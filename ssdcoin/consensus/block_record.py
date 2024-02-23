@@ -3,10 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Optional
 
-from blspy import G1Element
-
+from chia_rs import G1Element
 from typing_extensions import Protocol
 
+from ssdcoin.consensus.coinbase import create_puzzlehash_for_pk
 from ssdcoin.consensus.constants import ConsensusConstants
 from ssdcoin.consensus.pot_iterations import calculate_ip_iters, calculate_sp_iters
 from ssdcoin.types.blockchain_format.classgroup import ClassgroupElement
@@ -87,12 +87,16 @@ class BlockRecord(Streamable):
     # Sub-epoch (present iff this is the first SB after sub-epoch)
     sub_epoch_summary_included: Optional[SubEpochSummary]
 
-    # staking the mining farmer's public key puzzle hash
+    # stake
     farmer_public_key: G1Element
 
     @property
     def is_transaction_block(self) -> bool:
         return self.timestamp is not None
+
+    @property
+    def farm_puzzle_hash(self) -> bytes32:
+        return create_puzzlehash_for_pk(self.farmer_public_key)
 
     @property
     def first_in_sub_slot(self) -> bool:

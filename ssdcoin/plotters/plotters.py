@@ -52,9 +52,11 @@ class Options(Enum):
     COMPRESSION = 37
     BLADEBIT_DEVICE_INDEX = 38
     CUDA_TMP_DIR = 40
+    BLADEBIT_HYBRID_128_MODE = 41
+    BLADEBIT_HYBRID_16_MODE = 42
 
 
-chia_plotter_options = [
+ssdcoin_plotter_options = [
     Options.TMP_DIR,
     Options.TMP_DIR2,
     Options.K,
@@ -112,6 +114,8 @@ bladebit_cuda_plotter_options = [
     Options.FINAL_DIR,
     Options.COMPRESSION,
     Options.BLADEBIT_DEVICE_INDEX,
+    Options.BLADEBIT_HYBRID_128_MODE,
+    Options.BLADEBIT_HYBRID_16_MODE,
 ]
 
 bladebit_ram_plotter_options = [
@@ -464,6 +468,20 @@ def build_parser(subparsers, root_path, option_list, name, plotter_desc):
                 help="The CUDA device index",
                 default=0,
             )
+        if option is Options.BLADEBIT_HYBRID_128_MODE:
+            parser.add_argument(
+                "--disk-128",
+                action="store_true",
+                help="Enable hybrid disk plotting for 128G system RAM",
+                default=False,
+            )
+        if option is Options.BLADEBIT_HYBRID_16_MODE:
+            parser.add_argument(
+                "--disk-16",
+                action="store_true",
+                help="Enable hybrid disk plotting for 16G system RAM",
+                default=False,
+            )
 
 
 def call_plotters(root_path: Path, args):
@@ -487,7 +505,7 @@ def call_plotters(root_path: Path, args):
     plotters = argparse.ArgumentParser("ssd plotters", description="Available options.")
     subparsers = plotters.add_subparsers(help="Available options", dest="plotter")
 
-    build_parser(subparsers, root_path, chia_plotter_options, "chiapos", "Create a plot with the default ssdcoin plotter")
+    build_parser(subparsers, root_path, ssdcoin_plotter_options, "chiapos", "Create a plot with the default ssd plotter")
     build_parser(subparsers, root_path, madmax_plotter_options, "madmax", "Create a plot with madMAx")
 
     bladebit_parser = subparsers.add_parser("bladebit", help="Create a plot with bladebit")
@@ -499,11 +517,11 @@ def call_plotters(root_path: Path, args):
     subparsers.add_parser("version", help="Show plotter versions")
 
     deprecation_warning = (
-        "[DEPRECATED] 'ssdcoin plotters install' is no longer available. Use install-plotter.sh/ps1 instead."
+        "[DEPRECATED] 'ssd plotters install' is no longer available. Use install-plotter.sh/ps1 instead."
     )
     subparsers.add_parser("install", help=deprecation_warning, add_help=False)
 
-    deprecation_warning_bb2 = "[DEPRECATED] 'ssdcoin plotters bladebit2' was integrated to 'ssd plotters bladebit'"
+    deprecation_warning_bb2 = "[DEPRECATED] 'ssd plotters bladebit2' was integrated to 'ssd plotters bladebit'"
     subparsers.add_parser("bladebit2", help=deprecation_warning_bb2, add_help=False)
 
     known_args = plotters.parse_known_args(args)

@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 from ssdcoin.data_layer.data_layer import DataLayer
-from ssdcoin.server.server import SSDCoinServer
+from ssdcoin.server.server import ssdcoinServer
 
 
 class DataLayerAPI:
@@ -18,7 +18,7 @@ class DataLayerAPI:
     #     self.full_node.state_changed_callback = callback
 
     @property
-    def server(self) -> SSDCoinServer:
+    def server(self) -> ssdcoinServer:
         return self.data_layer.server
 
     def ready(self) -> bool:

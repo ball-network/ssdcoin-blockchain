@@ -1,0 +1,16 @@
+[Unit]
+Description=SSDCoin Timelord Service for %i
+Requires=ssdcoin-daemon@%i.service
+After=ssdcoin-daemon@%i.service
+
+[Service]
+Type=simple
+Environment=SSDCOIN_ROOT=/home/%i/.ssd/mainnet
+ExecStart=/opt/ssdcoin/ssdcoin_timelord
+User=%i
+Group=%i
+LimitNOFILE=1048576
+LimitNPROC=1048576
+
+[Install]
+WantedBy=multi-user.target

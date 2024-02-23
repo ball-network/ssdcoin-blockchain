@@ -26,7 +26,6 @@ echo "SSDCoin Installer Version is: $SSDCOIN_INSTALLER_VERSION"
 echo "Installing npm and electron packagers"
 cd npm_linux || exit 1
 npm ci
-PATH=$(npm bin):$PATH
 cd .. || exit 1
 
 echo "Create dist/"
@@ -34,7 +33,7 @@ rm -rf dist
 mkdir dist
 
 echo "Create executables with pyinstaller"
-SPEC_FILE=$(python -c 'import ssdcoin; print(ssdcoin.PYINSTALLER_SPEC_PATH)')
+SPEC_FILE=$(python -c 'import sys; from pathlib import Path; path = Path(sys.argv[1]); print(path.absolute().as_posix())' "pyinstaller.spec")
 pyinstaller --log-level=INFO "$SPEC_FILE"
 LAST_EXIT_CODE=$?
 if [ "$LAST_EXIT_CODE" -ne 0 ]; then
@@ -51,9 +50,11 @@ bash ./build_license_directory.sh
 CLI_RPM_BASE="ssdcoin-blockchain-cli-$SSDCOIN_INSTALLER_VERSION-1.$REDHAT_PLATFORM"
 mkdir -p "dist/$CLI_RPM_BASE/opt/ssdcoin"
 mkdir -p "dist/$CLI_RPM_BASE/usr/bin"
+mkdir -p "dist/$CLI_RPM_BASE/etc/systemd/system"
 cp -r dist/daemon/* "dist/$CLI_RPM_BASE/opt/ssdcoin/"
+cp assets/systemd/*.service "dist/$CLI_RPM_BASE/etc/systemd/system/"
 
-ln -s ../../opt/ssdcoin/ssd "dist/$CLI_RPM_BASE/usr/bin/ssd"
+ln -s ../../opt/ssdcoin/ssd "dist/$CLI_RPM_BASE/usr/bin/ssdcoin"
 # This is built into the base build image
 # shellcheck disable=SC1091
 . /etc/profile.d/rvm.sh
@@ -63,13 +64,18 @@ rvm use ruby-3
 # Marking as a dependency allows yum/dnf to automatically install the libxcrypt-compat package as well
 fpm -s dir -t rpm \
   -C "dist/$CLI_RPM_BASE" \
+  --directories "/opt/ssdcoin" \
   -p "dist/$CLI_RPM_BASE.rpm" \
   --name ssdcoin-blockchain-cli \
   --license Apache-2.0 \
   --version "$SSDCOIN_INSTALLER_VERSION" \
   --architecture "$REDHAT_PLATFORM" \
   --description "SSDCoin is a modern cryptocurrency built from scratch, designed to be efficient, decentralized, and secure." \
-  --depends /usr/lib64/libcrypt.so.1 \
+  --rpm-tag 'Recommends: libxcrypt-compat' \
+  --rpm-tag '%define _build_id_links none' \
+  --rpm-tag '%undefine _missing_build_ids_terminate_build' \
+  --before-install=assets/rpm/before-install.sh \
+  --rpm-tag 'Requires(pre): findutils' \
   .
 # CLI only rpm done
 cp -r dist/daemon ../ssdcoin-blockchain-gui/packages/gui
@@ -86,11 +92,11 @@ if [ "$REDHAT_PLATFORM" = "arm64" ]; then
   OPT_ARCH="--arm64"
 fi
 PRODUCT_NAME="ssdcoin"
-echo electron-builder build --linux rpm "${OPT_ARCH}" \
+echo npx electron-builder build --linux rpm "${OPT_ARCH}" \
   --config.extraMetadata.name=ssdcoin-blockchain \
   --config.productName="${PRODUCT_NAME}" --config.linux.desktop.Name="SSDCoin Blockchain" \
   --config.rpm.packageName="ssdcoin-blockchain"
-electron-builder build --linux rpm "${OPT_ARCH}" \
+npx electron-builder build --linux rpm "${OPT_ARCH}" \
   --config.extraMetadata.name=ssdcoin-blockchain \
   --config.productName="${PRODUCT_NAME}" --config.linux.desktop.Name="SSDCoin Blockchain" \
   --config.rpm.packageName="ssdcoin-blockchain"

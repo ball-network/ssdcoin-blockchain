@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import concurrent
+import contextlib
 import dataclasses
 import logging
 import multiprocessing
 from concurrent.futures.thread import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, AsyncIterator, ClassVar, Dict, List, Optional, Tuple, cast
 
 from typing_extensions import Literal
 
@@ -44,6 +45,11 @@ log = logging.getLogger(__name__)
 
 
 class Harvester:
+    if TYPE_CHECKING:
+        from ssdcoin.rpc.rpc_server import RpcServiceProtocol
+
+        _protocol_check: ClassVar[RpcServiceProtocol] = cast("Harvester", None)
+
     plot_manager: PlotManager
     plot_sync_sender: Sender
     root_path: Path
@@ -123,19 +129,20 @@ class Harvester:
 
         self.plot_sync_sender = Sender(self.plot_manager, self._mode)
 
-    async def _start(self) -> None:
+    @contextlib.asynccontextmanager
+    async def manage(self) -> AsyncIterator[None]:
         self._refresh_lock = asyncio.Lock()
         self.event_loop = asyncio.get_running_loop()
+        try:
+            yield
+        finally:
+            self._shut_down = True
+            self.executor.shutdown(wait=True)
+            self.plot_manager.stop_refreshing()
+            self.plot_manager.reset()
+            self.plot_sync_sender.stop()
 
-    def _close(self) -> None:
-        self._shut_down = True
-        self.executor.shutdown(wait=True)
-        self.plot_manager.stop_refreshing()
-        self.plot_manager.reset()
-        self.plot_sync_sender.stop()
-
-    async def _await_closed(self) -> None:
-        await self.plot_sync_sender.await_closed()
+            await self.plot_sync_sender.await_closed()
 
     def get_connections(self, request_node_type: Optional[NodeType]) -> List[Dict[str, Any]]:
         return default_get_connections(server=self.server, request_node_type=request_node_type)
@@ -173,29 +180,6 @@ class Harvester:
         asyncio.run_coroutine_threadsafe(self.plot_sync_sender.await_closed(), asyncio.get_running_loop())
         self.plot_manager.stop_refreshing()
 
-    def get_plot_by_name(self, name: str) -> str:
-        if self.plot_manager.plot_count() > 0:
-            with self.plot_manager:
-                for path, plot_info in self.plot_manager.plots.items():
-                    prover = plot_info.prover
-                    response_plots.append(
-                        {
-                            "filename": str(path),
-                            "size": prover.get_size(),
-                            "plot_id": prover.get_id(),
-                            "pool_public_key": plot_info.pool_public_key,
-                            "pool_contract_puzzle_hash": plot_info.pool_contract_puzzle_hash,
-                            "plot_public_key": plot_info.plot_public_key,
-                            "file_size": plot_info.file_size,
-                            "time_modified": int(plot_info.time_modified),
-                            "compression_level": prover.get_compression_level(),
-                        }
-                    )
-                self.log.debug(
-                    f"get_plots response: plots: {len(response_plots)}, "
-                    f"failed_to_open_filenames: {len(self.plot_manager.failed_to_open_filenames)}, "
-                    f"no_key_filenames: {len(self.plot_manager.no_key_filenames)}"
-                )
     def get_plots(self) -> Tuple[List[Dict[str, Any]], List[str], List[str]]:
         self.log.debug(f"get_plots prover items: {self.plot_manager.plot_count()}")
         response_plots: List[Dict[str, Any]] = []
