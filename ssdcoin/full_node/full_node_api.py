@@ -994,7 +994,6 @@ class FullNodeAPI:
                     None,
                     None,
                     None,
-                    None,
                     prev_b,
                     finished_sub_slots,
                 )
