@@ -1375,7 +1375,7 @@ class Blockchain(BlockchainInterface):
             if space == 0 or blocks == 0:
                 coefficient = 1
             else:
-                bei = 10 if height < 800110 or height > 800600 else 3
+                bei = 10 if height < 800115 or height > 800600 else 3
                 coefficient = round(0.05 + 1 / (stake_amount / space / bei + 0.05), 15)
         else:
             coefficient = 20
