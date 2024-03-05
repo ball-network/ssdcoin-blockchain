@@ -62,7 +62,7 @@ from ssdcoin.data_layer.download_data import (
 from ssdcoin.rpc.rpc_server import StateChangedProtocol, default_get_connections
 from ssdcoin.rpc.wallet_rpc_client import WalletRpcClient
 from ssdcoin.server.outbound_message import NodeType
-from ssdcoin.server.server import ssdcoinServer
+from ssdcoin.server.server import SSDCoinServer
 from ssdcoin.server.ws_connection import WSSSDCoinConnection
 from ssdcoin.types.blockchain_format.sized_bytes import bytes32
 from ssdcoin.util.ints import uint32, uint64

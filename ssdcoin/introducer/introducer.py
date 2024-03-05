@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, ClassVar, Dict, List, Opti
 from ssdcoin.rpc.rpc_server import StateChangedProtocol, default_get_connections
 from ssdcoin.server.introducer_peers import VettedPeer
 from ssdcoin.server.outbound_message import NodeType
-from ssdcoin.server.server import ssdcoinServer
+from ssdcoin.server.server import SSDCoinServer
 from ssdcoin.server.ws_connection import WSSSDCoinConnection
 from ssdcoin.util.ints import uint64
 
@@ -21,7 +21,7 @@ class Introducer:
         _protocol_check: ClassVar[RpcServiceProtocol] = cast("Introducer", None)
 
     @property
-    def server(self) -> ssdcoinServer:
+    def server(self) -> SSDCoinServer:
         # This is a stop gap until the class usage is refactored such the values of
         # integral attributes are known at creation of the instance.
         if self._server is None:
@@ -33,7 +33,7 @@ class Introducer:
         self.max_peers_to_send = max_peers_to_send
         self.recent_peer_threshold = recent_peer_threshold
         self._shut_down = False
-        self._server: Optional[ssdcoinServer] = None
+        self._server: Optional[SSDCoinServer] = None
         self.log = logging.getLogger(__name__)
 
     @contextlib.asynccontextmanager
@@ -56,7 +56,7 @@ class Introducer:
     def get_connections(self, request_node_type: Optional[NodeType]) -> List[Dict[str, Any]]:
         return default_get_connections(server=self.server, request_node_type=request_node_type)
 
-    def set_server(self, server: ssdcoinServer):
+    def set_server(self, server: SSDCoinServer):
         self._server = server
 
     async def _vetting_loop(self):
