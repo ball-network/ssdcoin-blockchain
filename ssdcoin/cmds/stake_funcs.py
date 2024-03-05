@@ -134,24 +134,17 @@ async def stake_transactions(
 
 
 async def stake_info(
-        wallet_rpc_port: Optional[int], fp: Optional[int], stake_category: str
+        wallet_rpc_port: Optional[int], fp: Optional[int]
 ) -> None:
     async with get_wallet_client(wallet_rpc_port, fp) as (wallet_client, fingerprint, _):
-        is_stake_farm = stake_category == "farm"
-        response = await wallet_client.stake_info(fingerprint, is_stake_farm)
-        print(f"Stake Category: "+stake_category)
-        if is_stake_farm:
-            print(f"Stake Balance: {response['balance'] / units['ssdcoin']}")
-            print(f"Stake Balance Other: {response['balance_other'] / units['ssdcoin']}")
-            print(f"Stake Balance Income: {response['balance_income'] / units['ssdcoin']}")
-            print(f"Stake Balance 24H Exp: {response['balance_exp'] / units['ssdcoin']}")
-            print(f"Stake Reward: {response['stake_reward'] / units['ssdcoin']}")
-            print(f"Stake Address: {response['address']}")
-        else:
-            print(f"Stake Balance: {response['balance'] / units['ssdcoin']}")
-            print(f"Stake Balance 24H Exp: {response['balance_exp'] / units['ssdcoin']}")
-            print(f"Stake Reward: {response['stake_reward'] / units['ssdcoin']}")
+        response = await wallet_client.stake_info(fingerprint)
 
+        print(f"Stake Balance: {response['balance'] / units['ssdcoin']}")
+        print(f"Stake Balance Other: {response['balance_other'] / units['ssdcoin']}")
+        print(f"Stake Balance Income: {response['balance_income'] / units['ssdcoin']}")
+        print(f"Stake Balance 24H Exp: {response['balance_exp'] / units['ssdcoin']}")
+        print(f"Stake Reward: {response['stake_reward'] / units['ssdcoin']}")
+        print(f"Stake Address: {response['address']}")
 
 async def stake_send(
     wallet_rpc_port: Optional[int],

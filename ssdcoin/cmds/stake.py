@@ -23,11 +23,9 @@ def stake_cmd(ctx: click.Context) -> None:
     default=None,
 )
 @click.option("-f", "--fingerprint", help="Set the fingerprint to specify which wallet to use", type=int)
-@click.argument("stake_category", type=click.Choice(["farm", "lock"]), nargs=1, required=True)
 def stake_info_cmd(
     wallet_rpc_port: Optional[int],
     fingerprint: int,
-    stake_category: str,
 ) -> None:
     from .stake_funcs import stake_info
 
@@ -35,7 +33,6 @@ def stake_info_cmd(
         stake_info(
             wallet_rpc_port=wallet_rpc_port,
             fp=fingerprint,
-            stake_category=stake_category,
         )
     )
 
@@ -153,7 +150,6 @@ def get_transactions_cmd(
 )
 @click.option("-t", "--address", help="stake address", type=str, default="", required=True)
 @click.option("-s", "--stake-type", help="Set the stake type", type=int, default=None)
-@click.argument("stake_category", type=click.Choice(["farm", "lock"]), nargs=1, required=True)
 def stake_send_cmd(
     wallet_rpc_port: Optional[int],
     fingerprint: int,
@@ -162,7 +158,6 @@ def stake_send_cmd(
     fee: str,
     address: str,
     stake_type: Optional[int],
-    stake_category: str,
 ) -> None:
     from .stake_funcs import stake_send
 
@@ -175,7 +170,6 @@ def stake_send_cmd(
             fee=Decimal(fee),
             address=address,
             stake_type=stake_type,
-            stake_category=stake_category,
         )
     )
 

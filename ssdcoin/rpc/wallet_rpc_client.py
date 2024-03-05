@@ -1684,16 +1684,15 @@ class WalletRpcClient(RpcClient):
         res = await self.fetch("stake_send", {
             "wallet_id": wallet_id,
             "stake_type": stake_type,
-            "is_stake_farm": 1,
             "address": address,
             "amount": amount,
             "fee": fee,
         })
         return TransactionRecord.from_json_dict_convenience(res["transaction"])
 
-    async def stake_info(self, wallet_id: int, is_stake_farm: bool) -> Dict[str, Any]:
+    async def stake_info(self, wallet_id: int) -> Dict[str, Any]:
         response = await self.fetch("stake_info", {
-            "wallet_id": wallet_id, "is_stake_farm": is_stake_farm
+            "wallet_id": wallet_id,
         })
         return response
 
